@@ -1,0 +1,568 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Logs Downloader</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #000000;
+      --container-bg: #ffffff;
+    }
+
+    body.dark-mode {
+      --bg-color: #1f1f1f;
+      --text-color: #e0e0e0;
+      --container-bg: #2c2c2c;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      transition: background-color 0.3s ease, color 0.3s ease;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    .tab-container {
+      max-width: 800px;
+      margin: 40px auto;
+      background: var(--container-bg);
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    .tab-header {
+      font-weight: 600;
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+    }
+
+    .tab-header i {
+      margin-right: 10px;
+      color: #0d6efd;
+    }
+
+    .theme-toggle {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+    }
+
+    #loadingSpinner, #otherSpinner {
+      display: none;
+    }
+
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1055;
+    }
+  </style>
+</head>
+<body>
+  <button class="btn btn-outline-secondary theme-toggle" onclick="toggleTheme()">🌙 / ☀️</button>
+
+  <div class="tab-container">
+    <ul class="nav nav-tabs" id="logTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="cs-tab" data-bs-toggle="tab" data-bs-target="#cs" type="button" role="tab">🔍 CS Logs</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="other-tab" data-bs-toggle="tab" data-bs-target="#other" type="button" role="tab">🧩 Other Logs</button>
+      </li>
+    </ul>
+    <div class="tab-content mt-4" id="logTabsContent">
+      <div class="tab-pane fade show active" id="cs" role="tabpanel">
+        <div class="tab-header"><i class="fas fa-robot"></i>CS Logs Downloader</div>
+        <form id="logForm">
+          <div class="mb-3">
+            <label for="date" class="form-label">📅 Select Date:</label>
+            <input type="date" class="form-control" name="date" id="date" required />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">🌍 Environment:</label>
+            <select name="env" class="form-select" required>
+              <option value="1">US-PROD</option>
+              <option value="2">DE-PROD</option>
+              <option value="3">JP-PROD</option>
+              <option value="4">AU-PROD</option>
+              <option value="5">EU-PROD</option>
+              <option value="6">NTT Data PROD</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="sidcid" class="form-label">🆔 Bot ID + User ID:</label>
+            <input type="text" class="form-control" name="sidcid" id="sidcid" placeholder="e.g. st-xxx+u-yyy" required />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">🌐 Language:</label>
+            <select name="lang" class="form-select" required>
+              <option value="1">English-LOGS</option>
+              <option value="2">English-Regression-LOGS</option>
+              <option value="3">USERS-English-Regression</option>
+              <option value="4">USERS-English</option>
+              <option value="5">USERS-french</option>
+              <option value="6">USERS-german</option>
+              <option value="7">USERS-multilang</option>
+              <option value="8">USERS-spanish</option>
+              <option value="9">french-LOGS</option>
+              <option value="10">german-LOGS</option>
+              <option value="11">multilang-LOGS</option>
+              <option value="12">spanish-LOGS</option>
+              <option value="13">All languages</option>
+            </select>
+          </div>
+
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary btn-lg">⬇️ Download Logs</button>
+          </div>
+
+          <div class="text-center mt-3">
+            <div class="spinner-border text-primary" role="status" id="loadingSpinner">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p id="statusText" class="text-muted mt-2"></p>
+          </div>
+        </form>
+      </div>
+
+      <div class="tab-pane fade" id="other" role="tabpanel">
+        <div class="tab-header"><i class="fas fa-layer-group"></i>Other Logs Downloader</div>
+        <form id="otherForm">
+          <div class="mb-3">
+            <label class="form-label">📅 Select Date:</label>
+            <input type="date" class="form-control" name="date" required />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">🌍 Region:</label>
+            <select name="env" class="form-select" required>
+              <option value="1">US-PROD</option>
+              <option value="2">DE-PROD</option>
+              <option value="3">JP-PROD</option>
+              <option value="4">AU-PROD</option>
+              <option value="5">EU-PROD</option>
+              <option value="6">NTT Data PROD</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">📝 Select Logs:</label>
+            <select name="logs" class="form-select" required>
+              <option value="1">BotsServiceAdmin Logs</option>
+              <option value="2">BotsServiceRuntime Logs</option>
+              <option value="3">Koreapp Logs</option>
+              <option value="4">FAQ Logs</option>
+              <option value="5">ML Logs</option>
+              <option value="6">app-logs</option>
+              <option value="7">profile-logs</option>
+              <option value="8">Nginx Logs</option>
+              <option value="9">Api Access Logs</option>
+              <option value="10">Error Logs</option>
+            </select>
+          </div>
+
+          <div class="d-grid">
+            <button type="submit" class="btn btn-success btn-lg">⬇️ Download Other Logs</button>
+          </div>
+
+          <div class="text-center mt-3">
+            <div class="spinner-border text-success" role="status" id="otherSpinner" style="display: none">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p id="otherStatusText" class="text-muted mt-2"></p>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="successToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body">
+          ✅ Logs downloaded successfully.
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    function toggleTheme() {
+      document.body.classList.toggle("dark-mode");
+    }
+
+    document.getElementById("logForm").addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const spinner = document.getElementById("loadingSpinner");
+      const statusText = document.getElementById("statusText");
+      const submitBtn = form.querySelector("button[type='submit']");
+
+      submitBtn.disabled = true;
+      spinner.style.display = "inline-block";
+      statusText.textContent = "Downloading logs... Please wait.";
+
+      const formData = new FormData(form);
+      const query = new URLSearchParams(formData).toString();
+
+      try {
+        const response = await fetch(`/download_cs?${query}`);
+        if (!response.ok) throw new Error("Download failed");
+
+        const blob = await response.blob();
+        const contentDisposition = response.headers.get("Content-Disposition");
+        const filename = contentDisposition?.match(/filename="(.+)"/)?.[1] || "cs_logs.zip";
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        statusText.textContent = "✅ Download complete.";
+        new bootstrap.Toast(document.getElementById("successToast")).show();
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = "❌ Download failed. Please try again.";
+      } finally {
+        spinner.style.display = "none";
+        submitBtn.disabled = false;
+      }
+    });
+
+    document.getElementById("otherForm").addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const spinner = document.getElementById("otherSpinner");
+      const statusText = document.getElementById("otherStatusText");
+      const submitBtn = form.querySelector("button[type='submit']");
+
+      submitBtn.disabled = true;
+      spinner.style.display = "inline-block";
+      statusText.textContent = "Downloading logs... Please wait.";
+
+      const formData = new FormData(form);
+      const queryParams = new URLSearchParams();  // 
+      queryParams.set("date", formData.get("date"));
+      queryParams.set("env", formData.get("env"));
+      queryParams.set("logs", formData.get("logs"));  // 
+
+      //selectedLogs.forEach(log => queryParams.append("logs", log));
+
+      try {
+        const response = await fetch(`/download_other?${queryParams.toString()}`);
+        if (!response.ok) throw new Error("Download failed");
+
+        const blob = await response.blob();
+        const contentDisposition = response.headers.get("Content-Disposition");
+        const filename = contentDisposition?.match(/filename="(.+)"/)?.[1] || "other_logs.zip";
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        statusText.textContent = "✅ Download complete.";
+        new bootstrap.Toast(document.getElementById("successToast")).show();
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = "❌ Download failed. Please try again.";
+      } finally {
+        spinner.style.display = "none";
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html> -->
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Logs Downloader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      background: linear-gradient(to right, #f4f6f9, #e9ecef);
+      font-family: 'Segoe UI', sans-serif;
+      color: #212529;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    body.dark-mode {
+      background: #1f1f1f;
+      color: #e0e0e0;
+    }
+    .tab-container {
+      max-width: 900px;
+      margin: 50px auto;
+      background: #ffffff;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0px 20px 40px rgba(0, 0, 0, 0.1);
+    }
+    h4 {
+      font-weight: 600;
+      margin-bottom: 15px;
+    }
+    label {
+      font-weight: 500;
+      margin-top: 10px;
+    }
+    select, input[type="text"], input[type="date"] {
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 1rem;
+    }
+    .btn-lg {
+      padding: 12px 20px;
+      border-radius: 14px;
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    .nav-tabs .nav-link {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .spinner-border {
+      width: 2rem;
+      height: 2rem;
+    }
+    .progress {
+      height: 8px;
+      border-radius: 20px;
+      overflow: hidden;
+      background-color: #e9ecef;
+    }
+    .progress-bar {
+      background-color: #0d6efd;
+      transition: width 0.6s ease;
+    }
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1055;
+    }
+  </style>
+</head>
+<body>
+  
+ <button class="btn btn-outline-secondary position-absolute top-0 end-0 m-4" onclick="toggleTheme()">🌙 / ☀️</button>
+  <div class="tab-container">
+    <ul class="nav nav-tabs">
+      <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#cs">🤖 CS Logs</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#other">📦 Other Logs</a></li>
+    </ul>
+    <div class="tab-content mt-4">
+      <div class="tab-pane fade show active" id="cs">
+        <form id="logForm">
+          <h4>📅 Select Date</h4>
+          <input type="date" class="form-control mb-3" name="date" required />
+
+          <h4>🌍 Select Environment</h4>
+          <select name="env" class="form-select mb-3" required>
+            <option value="1">US-PROD</option>
+            <option value="2">DE-PROD</option>
+            <option value="3">AU-PROD</option>
+            <option value="4">EU-PROD</option>
+          </select>
+
+          <h4>🆔 Bot ID + User ID</h4>
+          <input type="text" class="form-control mb-3" name="sidcid" placeholder="st-xxx+u-yyy" required />
+
+          <h4>🌐 Select Language</h4>
+          <select name="lang" class="form-select mb-4" required>
+            <option value="1">English-LOGS</option>
+            <option value="2">English-Regression-LOGS</option>
+            <option value="3">USERS-English-Regression</option>
+            <option value="4">USERS-English</option>
+            <option value="5">USERS-french</option>
+            <option value="6">USERS-german</option>
+            <option value="7">USERS-multilang</option>
+            <option value="8">USERS-spanish</option>
+            <option value="9">french-LOGS</option>
+            <option value="10">german-LOGS</option>
+            <option value="11">multilang-LOGS</option>
+            <option value="12">spanish-LOGS</option>
+            <option value="13">All languages</option>
+          </select>
+
+          <button type="submit" class="btn btn-primary btn-lg w-100">⬇️ Download CS Logs</button>
+          <div class="text-center mt-3">
+            <div id="loadingSpinner" class="spinner-border text-primary" style="display:none;"></div>
+            <div class="progress mt-2" style="display:none;" id="progressCS">
+              <div class="progress-bar" role="progressbar" style="width: 0%" id="progressBarCS"></div>
+            </div>
+            <p id="statusText" class="text-muted mt-2"></p>
+            <!-- <button id="cancelCS" class="btn btn-sm btn-danger mt-2" style="display:none;">⛔ Cancel</button> -->
+          </div>
+        </form>
+      </div>
+
+      <div class="tab-pane fade" id="other">
+        <form id="otherForm">
+          <h4>📅 Select Date</h4>
+          <input type="date" class="form-control mb-3" name="date" required />
+
+          <h4>🌍 Select Region</h4>
+          <select name="env" class="form-select mb-3" required>
+            <option value="1">US-PROD</option>
+            <option value="2">DE-PROD</option>
+            <option value="3">AU-PROD</option>
+            <option value="4">EU-PROD</option>
+      
+          </select>
+
+          <h4>🗂️ Select Log Type</h4>
+          <select name="logs" class="form-select mb-4" required>
+            <option value="1">BotsServiceAdmin Logs</option>
+            <option value="2">BotsServiceRuntime Logs</option>
+            <option value="3">Koreapp Logs</option>
+            <!-- <option value="4">FAQ Logs</option> 
+            <option value="5">ML Logs</option>  -->
+            <option value="6">app-logs</option>
+            <option value="7">profile-logs</option>
+        
+        
+          </select>
+
+          <button type="submit" class="btn btn-success btn-lg w-100">⬇️ Download Other Logs</button>
+          <div class="text-center mt-3">
+            <div id="otherSpinner" class="spinner-border text-success" style="display:none;"></div>
+            <div class="progress mt-2" style="display:none;" id="progressOther">
+              <div class="progress-bar bg-success" role="progressbar" style="width: 0%" id="progressBarOther"></div>
+            </div>
+            <p id="otherStatusText" class="text-muted mt-2"></p>
+            <!-- <button id="cancelOther" class="btn btn-sm btn-danger mt-2" style="display:none;">⛔ Cancel</button> -->
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container">
+    <div id="successToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body">
+          ✅ Logs downloaded successfully.
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+   <!-- <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script> -->
+  <script>
+    function toggleTheme() {
+      document.body.classList.toggle("dark-mode");
+    }
+
+    function updateProgress(barId, percent) {
+      const bar = document.getElementById(barId);
+      if (bar) bar.style.width = `${percent}%`;
+    }
+
+    function showToast() {
+      new bootstrap.Toast(document.getElementById("successToast")).show();
+    }
+  </script>
+  <script>
+    function handleFormSubmission(formId, endpoint, spinnerId, statusTextId, cancelBtnId) {
+      const form = document.getElementById(formId);
+      const spinner = document.getElementById(spinnerId);
+      const statusText = document.getElementById(statusTextId);
+      // const cancelBtn = document.getElementById(cancelBtnId);
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        spinner.style.display = "inline-block";
+        statusText.textContent = "🕒 Request sent. Preparing your logs...";
+
+        const formData = new FormData(form);
+        const query = new URLSearchParams(formData).toString();
+
+        try {
+          const taskResp = await fetch(`${endpoint}?${query}`);
+          const task = await taskResp.json();
+          const task_id = task.task_id;
+
+          // // cancelBtn.style.display = "inline-block";
+          // cancelBtn.onclick = async () => {
+          //   await fetch(`/cancel/${task_id}`, { method: "POST" });
+          //   statusText.textContent = "❌ Cancelled by user.";
+          //   spinner.style.display = "none";
+          //   cancelBtn.style.display = "none";
+          // };
+
+          const poll = setInterval(async () => {
+            const res = await fetch(`/status/${task_id}`);
+            const data = await res.json();
+
+            if (data.status === "completed") {
+              clearInterval(poll);
+            //  cancelBtn.style.display = "none";
+              const downloadRes = await fetch(`/download/${task_id}`);
+              const blob = await downloadRes.blob();
+              const contentDisposition = downloadRes.headers.get("Content-Disposition");
+              const filename = contentDisposition?.match(/filename="(.+)"/)?.[1] || "logs.zip";
+
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              window.URL.revokeObjectURL(url);
+
+              statusText.textContent = "✅ Logs downloaded successfully.";
+              spinner.style.display = "none";
+            } else if (data.status === "failed" || data.status === "cancelled") {
+              clearInterval(poll);
+             // cancelBtn.style.display = "none";
+              statusText.textContent = `❌ ${data.status.toUpperCase()}: ${data.result || "Operation failed"}`;
+              spinner.style.display = "none";
+            } else {
+              statusText.textContent = `⌛ Status: ${data.status} (${data.elapsed_seconds}s)`;
+            }
+          }, 5000);
+        } catch (err) {
+          console.error(err);
+          statusText.textContent = "❌ Error: Something went wrong.";
+          spinner.style.display = "none";
+        }
+      });
+    }
+
+    handleFormSubmission("logForm", "/download_cs", "loadingSpinner", "statusText", "cancelCS");
+    handleFormSubmission("otherForm", "/download_other", "otherSpinner", "otherStatusText", "cancelOther");
+  </script>
+</body>
+</html>
