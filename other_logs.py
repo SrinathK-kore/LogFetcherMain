@@ -280,7 +280,9 @@ def list_matching_keys(s3, bucket, prefix, pattern, cancel_event=None, task_id=N
 def safe_download_file(s3, bucket, key, local_path, retries=3):
     for attempt in range(1, retries + 1):
         try:
-            s3.download_file(bucket, key, local_path)
+            # Use download_fileobj instead to avoid ETag validation
+            with open(local_path, 'wb') as f:
+                s3.download_fileobj(bucket, key, f)
             return True
         except botocore.exceptions.ClientError as e:
             error_code = e.response['Error']['Code']
@@ -298,6 +300,7 @@ def safe_download_file(s3, bucket, key, local_path, retries=3):
             return False
     print(f"[FAILED] Giving up on {key} after {retries} attempts")
     return False
+
 
 def download_keys(s3, bucket, matched_keys, prefix, local_path, max_files, cancel_event=None, task_id=None):
     print(f"[DEBUG] Downloading {len(matched_keys)} keys to: {local_path}")
