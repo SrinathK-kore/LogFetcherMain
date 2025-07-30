@@ -1,17 +1,25 @@
+
+
 # import os
 # import boto3
 # import shutil
 # import uuid
-# import logging
 # from datetime import datetime
 # from concurrent.futures import ThreadPoolExecutor, as_completed
-# from boto3.s3.transfer import TransferConfig, S3Transfer
 # import s3_access
+# from dotenv import load_dotenv
 
-# # logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] [%(levelname)s] %(message)s')
-# logging.basicConfig(level=logging.DEBUG)
+
+# # Load environment variables from .env
+# load_dotenv()
+
+# # Access the values
+# aws_key = os.getenv("AWS_ACCESS_KEY_ID")
+# aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
+
 
 # def get_s3_client(access_key, secret_key, region):
+#     print(f"[DEBUG] Creating S3 client for region: {region}")
 #     return boto3.client(
 #         's3',
 #         aws_access_key_id=access_key,
@@ -20,76 +28,76 @@
 #     )
 
 # def list_folders(s3, bucket, prefix):
+#     print(f"[DEBUG] Listing folders in bucket: {bucket}, prefix: {prefix}")
 #     paginator = s3.get_paginator('list_objects_v2')
 #     result = paginator.paginate(Bucket=bucket, Prefix=prefix, Delimiter='/')
 #     folders = []
 #     for page in result:
-#         for cp in page.get('CommonPrefixes', []):
-#             folder_name = cp['Prefix'].rstrip('/').split('/')[-1]
-#             folders.append(folder_name)
-#             logging.debug(f"[LIST FOLDER] Found folder: {folder_name}")
+#         if 'CommonPrefixes' in page:
+#             for cp in page['CommonPrefixes']:
+#                 folder_name = cp['Prefix'].rstrip('/').split('/')[-1]
+#                 print(f"[DEBUG] Found folder: {folder_name}")
+#                 folders.append(folder_name)
 #     return folders
 
 # def list_matching_keys(s3, bucket, prefix, pattern, cancel_event=None, task_id=None):
+#     print(f"[DEBUG] Scanning S3 keys in {bucket}/{prefix} for pattern: {pattern}")
 #     paginator = s3.get_paginator('list_objects_v2')
 #     pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
 #     matched_keys = []
-#     total_size = 0
-#     for page in pages:
+#     for page_index, page in enumerate(pages, 1):
 #         if cancel_event and cancel_event.is_set():
-#             logging.info("[CANCEL] Key listing cancelled")
+#             print(f"[CANCELLED] Task {task_id} cancelled during S3 scan")
 #             return []
-#         for obj in page.get('Contents', []):
+#         contents = page.get('Contents', [])
+#         for obj in contents:
+#             if cancel_event and cancel_event.is_set():
+#                 print(f"[CANCELLED] Task {task_id} cancelled during object iteration")
+#                 return []
 #             key = obj['Key']
-#             size = obj['Size']
 #             if pattern in key:
+#                 print(f"[DEBUG] Matched Key: {key}")
 #                 matched_keys.append(key)
-#                 total_size += size
-#                 logging.debug(f"[MATCH] Key matched: {key} (Size: {size} bytes)")
-#     logging.info(f"[SUMMARY] Total matched keys: {len(matched_keys)}; Total size: {total_size / (1024**2):.2f} MB")
-#     if total_size > 2 * 1024 * 1024 * 1024:
-#         logging.warning(f"[WARN] Total estimated download size is over 2GB: {total_size / (1024**3):.2f} GB")
+#     print(f"[DEBUG] Total matched keys: {len(matched_keys)}")
 #     return matched_keys
 
 # def download_keys(s3, bucket, matched_keys, prefix, local_path, max_files, cancel_event=None, task_id=None):
+#     print(f"[DEBUG] Downloading {len(matched_keys)} keys to: {local_path}")
 #     os.makedirs(local_path, exist_ok=True)
 #     downloaded = 0
-#     config = TransferConfig(multipart_threshold=20 * 1024 * 1024, max_concurrency=10, multipart_chunksize=25 * 1024 * 1024)
-#     transfer = S3Transfer(s3, config)
 #     for key in matched_keys:
 #         if cancel_event and cancel_event.is_set():
-#             logging.warning("[CANCEL] Download cancelled")
+#             print(f"[CANCELLED] Task {task_id} cancelled while downloading")
 #             shutil.rmtree(local_path, ignore_errors=True)
 #             return None
 #         rel_path = key.replace(prefix, '').lstrip('/')
 #         local_file_path = os.path.join(local_path, rel_path)
+#         print(f"[DEBUG] Downloading {key} to {local_file_path}")
+#         print(f"[DEBUG] AWS CLI equivalent: aws s3 cp s3://{bucket}/{key} {local_file_path}")
 #         os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
 #         try:
-#             logging.info(f"[DOWNLOAD] Starting download: s3://{bucket}/{key} -> {local_file_path}")
-#             transfer.download_file(bucket, key, local_file_path)
+#             s3.download_file(bucket, key, local_file_path)
 #             downloaded += 1
-#             logging.info(f"[SUCCESS] Downloaded: {key}")
 #             if downloaded >= max_files:
-#                 logging.info("[LIMIT] Max file limit reached")
+#                 print(f"[DEBUG] Max file limit {max_files} reached.")
 #                 return True
 #         except Exception as e:
-#             logging.error(f"[ERROR] Failed to download {key}: {e}")
-#             continue
-#     return downloaded > 0
+#             print(f"[ERROR] Failed to download {key}: {e}")
+#     return True if downloaded > 0 else False
 
 # def download_log(s3, bucket, prefix, pattern, local_path, max_files=500, cancel_event=None, task_id=None):
-#     logging.info(f"[START] Fetching logs from: s3://{bucket}/{prefix} with pattern '{pattern}'")
 #     matched_keys = list_matching_keys(s3, bucket, prefix, pattern, cancel_event, task_id)
 #     if cancel_event and cancel_event.is_set():
+#         print(f"[CANCELLED] Task {task_id} cancelled before download")
 #         return None
 #     if not matched_keys:
-#         logging.warning(f"[SKIP] No matching keys for pattern '{pattern}' under {prefix}")
+#         print(f"[DEBUG] No keys matched for prefix: {prefix}, pattern: {pattern}")
 #         shutil.rmtree(local_path, ignore_errors=True)
 #         return False
 #     return download_keys(s3, bucket, matched_keys, prefix, local_path, max_files, cancel_event, task_id)
 
 # def download_api_access_logs(s3, bucket, base_prefix, pattern, local_path, max_files=500, cancel_event=None, task_id=None):
-#     logging.info(f"[START] Fetching API access logs from: s3://{bucket}/{base_prefix}/ with pattern '{pattern}'")
+#     print(f"[DEBUG] Scanning API access logs under: {bucket}/{base_prefix}")
 #     ip_folders = list_folders(s3, bucket, base_prefix + '/')
 #     matched_keys = []
 #     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -98,26 +106,25 @@
 #         }
 #         for future in as_completed(future_to_ip):
 #             if cancel_event and cancel_event.is_set():
-#                 logging.warning("[CANCEL] API access download cancelled")
+#                 print(f"[CANCELLED] Task {task_id} cancelled during IP scan")
 #                 return None
 #             try:
 #                 keys = future.result()
 #                 matched_keys.extend(keys)
-#                 logging.debug(f"[MATCH] IP {future_to_ip[future]} matched {len(keys)} keys")
 #             except Exception as e:
-#                 logging.error(f"[ERROR] Failed for IP {future_to_ip[future]}: {e}")
-#                 continue
+#                 print(f"[ERROR] Exception while scanning IP folder: {e}")
 #             if len(matched_keys) >= max_files:
-#                 logging.info("[LIMIT] Max file limit reached during API access logs fetch")
 #                 break
+#     print(f"[DEBUG] Total matched API logs: {len(matched_keys)}")
 #     if not matched_keys:
-#         logging.warning("[SKIP] No API access logs matched")
 #         shutil.rmtree(local_path, ignore_errors=True)
 #         return False
 #     return download_keys(s3, bucket, matched_keys, base_prefix + '/', local_path, max_files, cancel_event, task_id)
 
 # def run_other_logs_fetch(date_str, env_id, selected_logs, cancel_event=None, task_id=None, task_metadata_ref=None):
-#     environments = ["US-PROD", "DE-PROD", "JP-PROD", "AU-PROD", "EU-PROD", "NTT Data PROD"]
+#     # environments = ["US-PROD", "DE-PROD", "JP-PROD", "AU-PROD", "EU-PROD", "NTT Data PROD"]
+#     environments = ["US-PROD", "DE-PROD", "AU-PROD", "EU-PROD"]
+
 #     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
 #     formatted_date = date_obj.strftime("%d-%b-%Y")
 #     session_id = uuid.uuid4().hex
@@ -126,10 +133,12 @@
 #     bucket = selected_account["bucketName"]
 #     region = selected_account["awsRegion"]
 
-#     logging.info(f"[INIT] Using bucket: {bucket}, region: {region}")
+#     print(f"[DEBUG] Task {task_id} - Using bucket: {bucket}, region: {region}")
+
 #     s3 = get_s3_client(selected_account["accessKey"], selected_account["secretKey"], region)
 
 #     folder_path = f"/tmp/{formatted_date}_OtherLogs_{session_id}"
+#     print(f"[DEBUG] Task {task_id} - Temp download folder: {folder_path}")
 #     os.makedirs(folder_path, exist_ok=True)
 
 #     log_type_paths = {
@@ -150,16 +159,16 @@
 
 #     for i, index in enumerate(selected_logs):
 #         if cancel_event and cancel_event.is_set():
-#             logging.warning("[CANCEL] Operation cancelled before job setup")
+#             print(f"[CANCELLED] Task {task_id} cancelled before job dispatch")
 #             shutil.rmtree(folder_path, ignore_errors=True)
 #             return None
 
 #         log_name = selected_account["ListOfAvailableLogs"][int(index) - 1]
 #         s3_key_field, pattern = log_type_paths[log_name]
 #         prefix = selected_account[s3_key_field] + formatted_date
-#         local_log_path = os.path.join(folder_path, log_name.replace(" ", "_"))
+#         print(f"[DEBUG] Task {task_id} - Preparing job for: {log_name}, Prefix: {prefix}, Pattern: {pattern}")
 
-#         # logging.info(f"[QUEUE] Preparing to fetch {log_name} from s3://{bucket}/{prefix} with pattern '{pattern}'")
+#         local_log_path = os.path.join(folder_path, log_name.replace(" ", "_"))
 
 #         if log_name == "Api Access Logs":
 #             jobs.append((download_api_access_logs, (s3, bucket, prefix, pattern, local_log_path, 500, cancel_event, task_id)))
@@ -170,40 +179,46 @@
 #         futures = [executor.submit(fn, *args) for fn, args in jobs]
 #         for i, future in enumerate(futures):
 #             if cancel_event and cancel_event.is_set():
-#                 # logging.warning("[CANCEL] Mid-execution cancelled")
+#                 print(f"[CANCELLED] Task {task_id} cancelled during execution")
 #                 shutil.rmtree(folder_path, ignore_errors=True)
 #                 return None
 #             result = future.result()
+#             if cancel_event and cancel_event.is_set():
+#                 print(f"[CANCELLED] Task {task_id} cancelled post job")
+#                 shutil.rmtree(folder_path, ignore_errors=True)
+#                 return None
 #             if result:
 #                 downloaded_types.append(selected_account["ListOfAvailableLogs"][int(selected_logs[i]) - 1])
 #             if task_metadata_ref and task_id:
-#                 task_metadata_ref[task_id]["progress"] = int((i + 1) / len(futures) * 100)
+#                 progress = int((i + 1) / len(futures) * 100)
+#                 task_metadata_ref[task_id]["progress"] = progress
+#                 print(f"[DEBUG] Task {task_id} - Progress: {progress}%")
 
 #     if cancel_event and cancel_event.is_set():
-#         # logging.warning("[CANCEL] Final check cancellation")
+#         print(f"[CANCELLED] Task {task_id} cancelled after download")
 #         shutil.rmtree(folder_path, ignore_errors=True)
 #         return None
 
 #     if not downloaded_types:
+#         print(f"[ERROR] Task {task_id} - No logs matched")
 #         shutil.rmtree(folder_path, ignore_errors=True)
 #         raise Exception("No logs matched the given criteria.")
 
 #     zip_filename = f"{formatted_date}_{'_'.join([t.replace(' ', '_') for t in downloaded_types])}.zip"
 #     zip_path = os.path.join("/tmp", zip_filename)
-#     logging.info(f"[ZIP] Creating zip at {zip_path}")
 #     shutil.make_archive(zip_path.replace(".zip", ""), 'zip', folder_path)
 #     shutil.rmtree(folder_path)
 
 #     if task_metadata_ref and task_id:
 #         task_metadata_ref[task_id]["progress"] = 100
+#         print(f"[DEBUG] Task {task_id} - Final progress: 100%")
 
-#     logging.info(f"[DONE] Logs packaged at {zip_path}")
+#     print(f"[DEBUG] Task {task_id} - Log download completed. Zip path: {zip_path}")
 #     return zip_path
 
 
 
-
-# .................latest wotking one..............
+# .................latest working one..............
 
 import os
 import boto3
@@ -214,13 +229,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import s3_access
 from dotenv import load_dotenv
 
-
 # Load environment variables from .env
 load_dotenv()
-
-# Access the values
-aws_key = os.getenv("AWS_ACCESS_KEY_ID")
-aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
 
 
 def get_s3_client(access_key, secret_key, region):
@@ -327,7 +337,6 @@ def download_api_access_logs(s3, bucket, base_prefix, pattern, local_path, max_f
     return download_keys(s3, bucket, matched_keys, base_prefix + '/', local_path, max_files, cancel_event, task_id)
 
 def run_other_logs_fetch(date_str, env_id, selected_logs, cancel_event=None, task_id=None, task_metadata_ref=None):
-    # environments = ["US-PROD", "DE-PROD", "JP-PROD", "AU-PROD", "EU-PROD", "NTT Data PROD"]
     environments = ["US-PROD", "DE-PROD", "AU-PROD", "EU-PROD"]
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
@@ -420,5 +429,3 @@ def run_other_logs_fetch(date_str, env_id, selected_logs, cancel_event=None, tas
 
     print(f"[DEBUG] Task {task_id} - Log download completed. Zip path: {zip_path}")
     return zip_path
-
-

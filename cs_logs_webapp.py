@@ -7,17 +7,21 @@ import S3_accessCS
 import shlex
 import re
 from dotenv import load_dotenv
-
+import concurrent.futures
+import atexit
 
 # Load environment variables from .env
 load_dotenv()
 
-# Access the values
-aws_key = os.getenv("AWS_ACCESS_KEY_ID")
-aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+atexit.register(executor.shutdown)
 
-
-# Removed circular import of task_metadata
+def safe_submit(fn, *args, **kwargs):
+    try:
+        return executor.submit(fn, *args, **kwargs)
+    except RuntimeError as e:
+        print(f"[ERROR] Could not submit job: {e}")
+        return None
 
 def is_valid_sidcid(sidcid):
     return re.match(r"^st-[a-f0-9\-]+\+u-[a-f0-9\-]+$", sidcid) is not None
@@ -69,18 +73,16 @@ def downloadSingleLanguage(bucketName, cslogsPath, langFolder, ipFolder, folderP
         return False
 
 def parallel_download(jobs):
-    MAX_PARALLEL_PROCESSES = 8
-    active = []
+    futures = []
     for job in jobs:
-        p = mp.Process(target=job[0], args=job[1])
-        p.start()
-        active.append(p)
-        if len(active) >= MAX_PARALLEL_PROCESSES:
-            for proc in active:
-                proc.join()
-            active = []
-    for proc in active:
-        proc.join()
+        future = safe_submit(job[0], *job[1])
+        if future:
+            futures.append(future)
+    for future in futures:
+        try:
+            future.result()
+        except Exception as e:
+            print(f"[ERROR] Job failed: {e}")
 
 def searchAllLanguages(bucket, path, ipFolders, folder, pattern):
     jobs = [(downloadLogsAllLanguages, (bucket, path, ip, folder, pattern)) for ip in ipFolders]
