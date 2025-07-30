@@ -219,7 +219,6 @@
 
 
 # .................latest working one..............
-
 import os
 import boto3
 import shutil
@@ -228,6 +227,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import s3_access
 from dotenv import load_dotenv
+import botocore.exceptions
+import time
 
 # Load environment variables from .env
 load_dotenv()
@@ -276,6 +277,28 @@ def list_matching_keys(s3, bucket, prefix, pattern, cancel_event=None, task_id=N
     print(f"[DEBUG] Total matched keys: {len(matched_keys)}")
     return matched_keys
 
+def safe_download_file(s3, bucket, key, local_path, retries=3):
+    for attempt in range(1, retries + 1):
+        try:
+            s3.download_file(bucket, key, local_path)
+            return True
+        except botocore.exceptions.ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'InvalidObjectState':
+                print(f"[WARNING] Skipping {key} due to invalid state.")
+                return False
+            elif 'ETag' in str(e):
+                print(f"[RETRY] ETag mismatch on {key}, attempt {attempt}/{retries}")
+                time.sleep(1.5 * attempt)
+            else:
+                print(f"[ERROR] Unexpected error downloading {key}: {e}")
+                return False
+        except Exception as e:
+            print(f"[ERROR] Failed to download {key}: {e}")
+            return False
+    print(f"[FAILED] Giving up on {key} after {retries} attempts")
+    return False
+
 def download_keys(s3, bucket, matched_keys, prefix, local_path, max_files, cancel_event=None, task_id=None):
     print(f"[DEBUG] Downloading {len(matched_keys)} keys to: {local_path}")
     os.makedirs(local_path, exist_ok=True)
@@ -290,15 +313,13 @@ def download_keys(s3, bucket, matched_keys, prefix, local_path, max_files, cance
         print(f"[DEBUG] Downloading {key} to {local_file_path}")
         print(f"[DEBUG] AWS CLI equivalent: aws s3 cp s3://{bucket}/{key} {local_file_path}")
         os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
-        try:
-            s3.download_file(bucket, key, local_file_path)
+        if safe_download_file(s3, bucket, key, local_file_path):
             downloaded += 1
             if downloaded >= max_files:
                 print(f"[DEBUG] Max file limit {max_files} reached.")
                 return True
-        except Exception as e:
-            print(f"[ERROR] Failed to download {key}: {e}")
     return True if downloaded > 0 else False
+
 
 def download_log(s3, bucket, prefix, pattern, local_path, max_files=500, cancel_event=None, task_id=None):
     matched_keys = list_matching_keys(s3, bucket, prefix, pattern, cancel_event, task_id)
